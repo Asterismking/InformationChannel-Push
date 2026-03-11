@@ -495,22 +495,42 @@
         document.getElementById('config-generator').scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
+    // CORS proxies with fallback
+    const CORS_PROXIES = [
+        url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+        url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+    ];
+
+    async function fetchWithFallback(url, timeout = 12000) {
+        for (let i = 0; i < CORS_PROXIES.length; i++) {
+            try {
+                const proxyUrl = CORS_PROXIES[i](url);
+                const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(timeout) });
+                if (res.ok) return { ok: true, text: await res.text(), status: res.status, proxy: i };
+                if (i === CORS_PROXIES.length - 1) return { ok: false, status: res.status };
+            } catch (e) {
+                if (i === CORS_PROXIES.length - 1) throw e;
+            }
+        }
+    }
+
+    function isRSSContent(text) {
+        return text.includes('<rss') || text.includes('<feed') || text.includes('<atom') || text.includes('<channel');
+    }
+
     async function autoTestUrl(url, id) {
         const statusEl = document.getElementById(id + '-status');
         if (statusEl) statusEl.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:1.5px;"></span>';
         try {
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-            const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
-            if (res.ok) {
-                const text = await res.text();
-                if (text.includes('<rss') || text.includes('<feed') || text.includes('<atom') || text.includes('<channel')) {
-                    if (statusEl) statusEl.innerHTML = '<span class="tag tag-success"><i class="fa-solid fa-check"></i>可用</span>';
-                    return true;
-                }
+            const result = await fetchWithFallback(url);
+            if (result.ok && isRSSContent(result.text)) {
+                if (statusEl) statusEl.innerHTML = '<span class="tag tag-success"><i class="fa-solid fa-check"></i>可用</span>';
+                return true;
             }
             if (statusEl) statusEl.innerHTML = '<span class="tag tag-error"><i class="fa-solid fa-xmark"></i>不可用</span>';
         } catch {
-            if (statusEl) statusEl.innerHTML = '<span class="tag tag-warn"><i class="fa-solid fa-question"></i>超时</span>';
+            if (statusEl) statusEl.innerHTML = '<span class="tag tag-warn" title="代理超时，不影响实际使用"><i class="fa-solid fa-question"></i>代理超时</span>';
         }
         return false;
     }
@@ -521,16 +541,15 @@
         if (statusEl) statusEl.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:1.5px;"></span>';
 
         try {
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-            const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+            const result = await fetchWithFallback(url);
 
-            if (!res.ok) {
-                if (statusEl) statusEl.innerHTML = `<span class="tag tag-error"><i class="fa-solid fa-xmark"></i>${res.status}</span>`;
+            if (!result.ok) {
+                if (statusEl) statusEl.innerHTML = `<span class="tag tag-error"><i class="fa-solid fa-xmark"></i>${result.status}</span>`;
                 return;
             }
 
-            const text = await res.text();
-            if (text.includes('<rss') || text.includes('<feed') || text.includes('<atom') || text.includes('<channel')) {
+            const text = result.text;
+            if (isRSSContent(text)) {
                 if (statusEl) statusEl.innerHTML = '<span class="tag tag-success"><i class="fa-solid fa-check"></i>可用</span>';
 
                 // Parse and preview
@@ -565,7 +584,7 @@
                 if (statusEl) statusEl.innerHTML = '<span class="tag tag-error"><i class="fa-solid fa-xmark"></i>非RSS</span>';
             }
         } catch (e) {
-            if (statusEl) statusEl.innerHTML = '<span class="tag tag-warn"><i class="fa-solid fa-question"></i>超时</span>';
+            if (statusEl) statusEl.innerHTML = '<span class="tag tag-warn" title="代理超时，不影响实际使用"><i class="fa-solid fa-question"></i>代理超时</span>';
         }
     }
 
@@ -575,22 +594,21 @@
 
         const resultDiv = document.getElementById('test-result');
         resultDiv.style.display = 'block';
-        resultDiv.innerHTML = '<div class="flex items-center gap-2 text-sm text-slate-400"><span class="spinner"></span>正在测试...</div>';
+        resultDiv.innerHTML = '<div class="flex items-center gap-2 text-sm text-slate-400"><span class="spinner"></span>正在测试（自动尝试多个代理）...</div>';
 
         try {
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-            const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+            const result = await fetchWithFallback(url);
 
-            if (!res.ok) {
+            if (!result.ok) {
                 resultDiv.innerHTML = `<div class="p-4 bg-red-900/20 border border-red-800/30 rounded-lg">
-                    <span class="tag tag-error mb-2"><i class="fa-solid fa-xmark"></i>HTTP ${res.status}</span>
+                    <span class="tag tag-error mb-2"><i class="fa-solid fa-xmark"></i>HTTP ${result.status}</span>
                     <p class="text-xs text-slate-400 mt-2">该 URL 返回了错误状态码，可能不是有效的 RSS 源</p>
                 </div>`;
                 return;
             }
 
-            const text = await res.text();
-            if (text.includes('<rss') || text.includes('<feed') || text.includes('<atom') || text.includes('<channel')) {
+            const text = result.text;
+            if (isRSSContent(text)) {
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(text, 'text/xml');
                 const title = doc.querySelector('channel>title, feed>title')?.textContent || 'RSS Feed';
