@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RSS 发现工具 - InformationChannel-Push</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); }
+        .glow-blue { box-shadow: 0 0 20px rgba(59, 130, 246, 0.15); }
+        .glow-green { box-shadow: 0 0 20px rgba(34, 197, 94, 0.15); }
+        .result-card { transition: all 0.3s; }
+        .result-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+        .pulse-dot { animation: pulse-dot 2s infinite; }
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        input:focus { outline: none; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5); }
+        .tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 9999px; font-size: 0.7rem; font-weight: 600; }
+        .tag-success { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+        .tag-warn { background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); }
+        .tag-info { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+        .tag-error { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .btn-primary { background: linear-gradient(135deg, #3b82f6, #2563eb); transition: all 0.2s; }
+        .btn-primary:hover { background: linear-gradient(135deg, #2563eb, #1d4ed8); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4); }
+        .btn-secondary { background: rgba(71, 85, 105, 0.5); border: 1px solid rgba(148, 163, 184, 0.2); transition: all 0.2s; }
+        .btn-secondary:hover { background: rgba(71, 85, 105, 0.8); }
+        .copy-btn { cursor: pointer; transition: all 0.15s; }
+        .copy-btn:hover { color: #3b82f6; }
+        .copy-btn.copied { color: #22c55e; }
+        pre { background: #1e293b; border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 0.5rem; padding: 1rem; overflow-x: auto; font-size: 0.8rem; line-height: 1.6; }
+        code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+        .feed-item { border-left: 3px solid #3b82f6; padding-left: 0.75rem; margin-bottom: 0.75rem; }
+        .spinner { border: 2px solid rgba(255,255,255,0.1); border-top: 2px solid #3b82f6; border-radius: 50%; width: 16px; height: 16px; animation: spin 0.8s linear infinite; display: inline-block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <!-- Header -->
+    <div class="max-w-4xl mx-auto mb-8">
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center">
+                    <i class="fa-solid fa-rss text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-white">RSS 发现工具</h1>
+                    <p class="text-xs text-slate-400">输入网址，自动查找 RSS 订阅源</p>
+                </div>
+            </div>
+            <a href="index.html" class="btn-secondary px-4 py-2 rounded-lg text-sm flex items-center gap-2">
+                <i class="fa-solid fa-arrow-left"></i>返回编辑器
+            </a>
+        </div>
+
+        <!-- Search Box -->
+        <div class="glass rounded-2xl p-6 glow-blue">
+            <div class="flex gap-3">
+                <div class="flex-1 relative">
+                    <i class="fa-solid fa-globe absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    <input type="text" id="url-input" placeholder="输入网站地址，例如 www.amz123.com/kx 或 36kr.com"
+                        class="w-full bg-slate-800/80 border border-slate-600/50 rounded-xl py-3 pl-11 pr-4 text-sm text-white placeholder-slate-500">
+                </div>
+                <button onclick="startSearch()" id="search-btn" class="btn-primary px-6 py-3 rounded-xl text-sm font-semibold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-magnifying-glass"></i>查找 RSS
+                </button>
+            </div>
+            <div class="flex flex-wrap gap-2 mt-3">
+                <span class="text-xs text-slate-500">试试：</span>
+                <button onclick="quickSearch('36kr.com')" class="text-xs text-blue-400 hover:text-blue-300 underline">36氪</button>
+                <button onclick="quickSearch('sspai.com')" class="text-xs text-blue-400 hover:text-blue-300 underline">少数派</button>
+                <button onclick="quickSearch('www.amz123.com/kx')" class="text-xs text-blue-400 hover:text-blue-300 underline">AMZ123</button>
+                <button onclick="quickSearch('news.ycombinator.com')" class="text-xs text-blue-400 hover:text-blue-300 underline">Hacker News</button>
+                <button onclick="quickSearch('www.zhihu.com')" class="text-xs text-blue-400 hover:text-blue-300 underline">知乎</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Section -->
+    <div class="max-w-4xl mx-auto" id="results-area" style="display:none;">
+        <!-- Status -->
+        <div id="status-bar" class="mb-4 flex items-center gap-2 text-sm text-slate-400">
+            <span class="spinner"></span>
+            <span id="status-text">正在查找...</span>
+        </div>
+
+        <!-- Results Cards -->
+        <div id="results-container" class="space-y-4"></div>
+    </div>
+
+    <!-- Manual Test Section -->
+    <div class="max-w-4xl mx-auto mt-8">
+        <div class="glass rounded-2xl p-6">
+            <h3 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-flask text-purple-400"></i>手动测试 RSS 源
+            </h3>
+            <p class="text-xs text-slate-400 mb-4">直接粘贴一个 RSS URL，测试它是否可用并预览内容</p>
+            <div class="flex gap-3">
+                <input type="text" id="test-url-input" placeholder="粘贴 RSS Feed URL..."
+                    class="flex-1 bg-slate-800/80 border border-slate-600/50 rounded-xl py-2.5 px-4 text-sm text-white placeholder-slate-500">
+                <button onclick="testFeed()" class="btn-secondary px-5 py-2.5 rounded-xl text-sm font-medium text-white flex items-center gap-2">
+                    <i class="fa-solid fa-play"></i>测试
+                </button>
+            </div>
+            <div id="test-result" class="mt-4" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- RSSHub Instances Reference -->
+    <div class="max-w-4xl mx-auto mt-6 mb-12">
+        <div class="glass rounded-2xl p-6">
+            <h3 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-server text-green-400"></i>可用的 RSSHub 公共节点
+            </h3>
+            <p class="text-xs text-slate-400 mb-4">如果官方节点 rsshub.app 无法访问，可以尝试以下镜像节点。格式：<code class="text-blue-300">节点地址/路由</code></p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2" id="rsshub-instances">
+            </div>
+            <div class="mt-4 p-3 bg-slate-800/50 rounded-lg">
+                <p class="text-xs text-slate-400">
+                    <i class="fa-solid fa-lightbulb text-yellow-400 mr-1"></i>
+                    <strong>使用方法</strong>：找到网站的 RSSHub 路由（如 <code class="text-blue-300">/36kr/newsflashes</code>），
+                    拼接到节点地址后面即可。例如：<code class="text-green-300">https://rsshub.rssforever.com/36kr/newsflashes</code>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // RSSHub public instances
+    const RSSHUB_INSTANCES = [
+        { url: 'https://rsshub.app', name: '官方节点', note: '部分路由受限' },
+        { url: 'https://rsshub.rssforever.com', name: 'RSSForever', note: '推荐' },
+        { url: 'https://rss.fatpandac.com', name: 'FatPandac', note: '备用' },
+        { url: 'https://rsshub.pseudoyu.com', name: 'PseudoYu', note: '备用' },
+    ];
+
+    // Common RSS path patterns
+    const RSS_PATTERNS = [
+        '/feed', '/rss', '/atom.xml', '/rss.xml', '/feed.xml', '/index.xml',
+        '/feed/atom', '/feed/rss', '/rss/feed', '/feeds/posts/default',
+        '/blog/feed', '/blog/rss', '/blog/atom.xml', '/.rss', '/rss2.xml',
+    ];
+
+    // Well-known RSSHub routes
+    const RSSHUB_ROUTES = {
+        '36kr.com': [
+            { route: '/36kr/newsflashes', name: '36氪快讯' },
+            { route: '/36kr/news/latest', name: '36氪最新资讯' },
+        ],
+        'sspai.com': [
+            { route: '/sspai/matrix', name: '少数派 Matrix' },
+            { route: '/sspai/index', name: '少数派首页' },
+        ],
+        'amz123.com': [
+            { route: '/amz123/kx', name: 'AMZ123 跨境快讯' },
+        ],
+        'zhihu.com': [
+            { route: '/zhihu/hotlist', name: '知乎热榜' },
+            { route: '/zhihu/daily', name: '知乎日报' },
+        ],
+        'weibo.com': [
+            { route: '/weibo/search/hot', name: '微博热搜' },
+        ],
+        'news.ycombinator.com': [
+            { route: '/hackernews/best', name: 'Hacker News Best' },
+        ],
+        'github.com': [
+            { route: '/github/trending/daily/any', name: 'GitHub Trending' },
+        ],
+        'bilibili.com': [
+            { route: '/bilibili/ranking/0/3/1', name: 'B站排行榜' },
+            { route: '/bilibili/hot-search', name: 'B站热搜' },
+        ],
+        'douyin.com': [
+            { route: '/douyin/trending', name: '抖音热搜' },
+        ],
+        'twitter.com': [
+            { route: '/twitter/trending', name: 'Twitter/X 趋势' },
+        ],
+        'x.com': [
+            { route: '/twitter/trending', name: 'X 趋势' },
+        ],
+        'geekpark.net': [
+            { route: '/geekpark/breakingnews', name: '极客公园' },
+        ],
+        'v2ex.com': [
+            { route: '/v2ex/topics/latest', name: 'V2EX 最新' },
+            { route: '/v2ex/topics/hot', name: 'V2EX 热门' },
+        ],
+        'infoq.cn': [
+            { route: '/infoq/recommend', name: 'InfoQ 推荐' },
+        ],
+        'juejin.cn': [
+            { route: '/juejin/trending/all/1', name: '掘金热门' },
+        ],
+        'smzdm.com': [
+            { route: '/smzdm/ranking/pinlei/11/1', name: '什么值得买' },
+        ],
+        'toutiao.com': [
+            { route: '/toutiao/hot', name: '今日头条热榜' },
+        ],
+        'baidu.com': [
+            { route: '/baidu/top', name: '百度热搜' },
+        ],
+        'douban.com': [
+            { route: '/douban/movie/playing', name: '豆瓣正在热映' },
+            { route: '/douban/explore', name: '豆瓣发现' },
+        ],
+        'ifeng.com': [
+            { route: '/ifeng/feng', name: '凤凰网资讯' },
+        ],
+        'cls.cn': [
+            { route: '/cls/telegraph', name: '财联社电报' },
+        ],
+        'wallstreetcn.com': [
+            { route: '/wallstreetcn/news/global', name: '华尔街见闻' },
+        ],
+        'techcrunch.com': [
+            { route: '/techcrunch', name: 'TechCrunch' },
+        ],
+        'theverge.com': [
+            { route: '/theverge', name: 'The Verge' },
+        ],
+        'producthunt.com': [
+            { route: '/producthunt/today', name: 'Product Hunt Today' },
+        ],
+    };
+
+    // Render RSSHub instances
+    function renderInstances() {
+        const container = document.getElementById('rsshub-instances');
+        container.innerHTML = RSSHUB_INSTANCES.map(inst => `
+            <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-circle text-[6px] text-green-400 pulse-dot"></i>
+                    <code class="text-xs text-blue-300">${inst.url}</code>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-slate-500">${inst.note}</span>
+                    <button onclick="copyText('${inst.url}')" class="copy-btn text-slate-400 text-xs" title="复制">
+                        <i class="fa-regular fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function quickSearch(url) {
+        document.getElementById('url-input').value = url;
+        startSearch();
+    }
+
+    function normalizeUrl(input) {
+        let url = input.trim();
+        if (!url) return null;
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            url = 'https://' + url;
+        }
+        try { return new URL(url); } catch { return null; }
+    }
+
+    function getDomain(urlObj) {
+        return urlObj.hostname.replace(/^www\./, '');
+    }
+
+    async function startSearch() {
+        const input = document.getElementById('url-input').value;
+        const urlObj = normalizeUrl(input);
+        if (!urlObj) {
+            showStatus('❌ 请输入有效的网址', 'error');
+            return;
+        }
+
+        const domain = getDomain(urlObj);
+        const resultsArea = document.getElementById('results-area');
+        const container = document.getElementById('results-container');
+        resultsArea.style.display = 'block';
+        container.innerHTML = '';
+        showStatus('正在查找 ' + domain + ' 的 RSS 源...', 'loading');
+
+        const btn = document.getElementById('search-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>查找中...';
+
+        const results = [];
+
+        // 1. Check RSSHub known routes
+        const rsshubResults = findRSSHubRoutes(domain);
+        if (rsshubResults.length > 0) {
+            results.push({
+                type: 'rsshub',
+                title: 'RSSHub 路由',
+                icon: 'fa-solid fa-route',
+                color: 'text-purple-400',
+                items: rsshubResults
+            });
+        }
+
+        // 2. Try common RSS patterns
+        const nativeResults = generateNativeRSSUrls(urlObj);
+        results.push({
+            type: 'native',
+            title: '常见 RSS 路径（点击测试）',
+            icon: 'fa-solid fa-link',
+            color: 'text-blue-400',
+            items: nativeResults
+        });
+
+        // 3. Try well-known third-party feeds
+        const thirdParty = generateThirdPartyUrls(domain);
+        if (thirdParty.length > 0) {
+            results.push({
+                type: 'thirdparty',
+                title: '第三方 RSS 服务',
+                icon: 'fa-solid fa-plug',
+                color: 'text-orange-400',
+                items: thirdParty
+            });
+        }
+
+        // Render results
+        renderResults(results, domain);
+
+        // Auto-test RSSHub routes
+        if (rsshubResults.length > 0) {
+            for (const item of rsshubResults) {
+                await autoTestUrl(item.url, item.id);
+            }
+        }
+
+        showStatus(`找到 ${results.reduce((a, r) => a + r.items.length, 0)} 个可能的 RSS 源`, 'done');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i>查找 RSS';
+    }
+
+    function findRSSHubRoutes(domain) {
+        const results = [];
+        for (const [key, routes] of Object.entries(RSSHUB_ROUTES)) {
+            if (domain.includes(key)) {
+                routes.forEach(r => {
+                    const bestInstance = RSSHUB_INSTANCES[1]; // rssforever
+                    const id = 'rsshub-' + r.route.replace(/\//g, '-');
+                    results.push({
+                        id: id,
+                        name: r.name,
+                        route: r.route,
+                        url: bestInstance.url + r.route,
+                        instance: bestInstance.name,
+                        allUrls: RSSHUB_INSTANCES.map(inst => ({
+                            url: inst.url + r.route,
+                            name: inst.name,
+                            note: inst.note
+                        }))
+                    });
+                });
+            }
+        }
+        return results;
+    }
+
+    function generateNativeRSSUrls(urlObj) {
+        const base = urlObj.origin;
+        return RSS_PATTERNS.map(path => ({
+            name: path,
+            url: base + path,
+            id: 'native-' + path.replace(/[^a-z]/g, '')
+        }));
+    }
+
+    function generateThirdPartyUrls(domain) {
+        return [
+            {
+                name: 'Feed Creator (feed.janicek.co)',
+                url: `https://feed.janicek.co/feed/?url=https://${domain}`,
+                id: 'tp-feedcreator',
+                note: '自动从网页提取内容生成 RSS'
+            }
+        ];
+    }
+
+    function renderResults(results, domain) {
+        const container = document.getElementById('results-container');
+        container.innerHTML = results.map(group => `
+            <div class="glass rounded-xl p-5 result-card fade-in">
+                <h3 class="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                    <i class="${group.icon} ${group.color}"></i>${group.title}
+                </h3>
+                <div class="space-y-2">
+                    ${group.type === 'rsshub' ? renderRSSHubItems(group.items) : ''}
+                    ${group.type === 'native' ? renderNativeItems(group.items) : ''}
+                    ${group.type === 'thirdparty' ? renderThirdPartyItems(group.items) : ''}
+                </div>
+            </div>
+        `).join('') + renderConfigGenerator(domain);
+    }
+
+    function renderRSSHubItems(items) {
+        return items.map(item => `
+            <div class="bg-slate-800/50 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="font-semibold text-sm text-white">${item.name}</span>
+                        <span class="tag tag-info">RSSHub</span>
+                        <span id="${item.id}-status"></span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="testSpecificFeed('${item.url}', '${item.id}')" class="text-xs text-blue-400 hover:text-blue-300">
+                            <i class="fa-solid fa-play mr-1"></i>测试
+                        </button>
+                        <button onclick="copyText('${item.url}')" class="copy-btn text-slate-400 text-xs" title="复制 URL">
+                            <i class="fa-regular fa-copy"></i>
+                        </button>
+                        <button onclick="generateConfig('${item.name}', '${item.url}')" class="text-xs text-green-400 hover:text-green-300">
+                            <i class="fa-solid fa-code mr-1"></i>生成配置
+                        </button>
+                    </div>
+                </div>
+                <code class="text-xs text-slate-400 break-all">${item.url}</code>
+                <div class="mt-2 flex flex-wrap gap-1">
+                    ${item.allUrls.map(u => `
+                        <button onclick="testSpecificFeed('${u.url}', '${item.id}')"
+                            class="text-[10px] px-2 py-0.5 rounded bg-slate-700/50 text-slate-400 hover:text-white hover:bg-slate-600/50 transition-colors"
+                            title="${u.url}">
+                            ${u.name}
+                        </button>
+                    `).join('')}
+                </div>
+                <div id="${item.id}-preview" class="mt-3" style="display:none;"></div>
+            </div>
+        `).join('');
+    }
+
+    function renderNativeItems(items) {
+        return `<div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+            ${items.map(item => `
+                <button onclick="testSpecificFeed('${item.url}', '${item.id}')"
+                    class="flex items-center justify-between p-2.5 bg-slate-800/50 rounded-lg hover:bg-slate-700/50 transition-colors text-left group">
+                    <code class="text-xs text-slate-300 group-hover:text-white">${item.name}</code>
+                    <span id="${item.id}-status" class="text-[10px]"></span>
+                </button>
+            `).join('')}
+        </div>`;
+    }
+
+    function renderThirdPartyItems(items) {
+        return items.map(item => `
+            <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                <div>
+                    <span class="text-sm text-white">${item.name}</span>
+                    <span class="text-xs text-slate-500 ml-2">${item.note || ''}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="testSpecificFeed('${item.url}', '${item.id}')" class="text-xs text-blue-400 hover:text-blue-300">
+                        <i class="fa-solid fa-play mr-1"></i>测试
+                    </button>
+                    <button onclick="copyText('${item.url}')" class="copy-btn text-slate-400 text-xs">
+                        <i class="fa-regular fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="${item.id}-preview" class="mt-2" style="display:none;"></div>
+        `).join('');
+    }
+
+    function renderConfigGenerator(domain) {
+        return `
+        <div class="glass rounded-xl p-5 result-card fade-in mt-4" id="config-generator" style="display:none;">
+            <h3 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-code text-green-400"></i>配置代码（复制到 config.yaml）
+            </h3>
+            <div class="relative">
+                <pre id="config-output"><code id="config-code"></code></pre>
+                <button onclick="copyConfig()" class="absolute top-2 right-2 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg transition-colors">
+                    <i class="fa-regular fa-copy mr-1"></i>复制
+                </button>
+            </div>
+        </div>`;
+    }
+
+    function generateConfig(name, url) {
+        const id = name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+        const yaml = `    - id: "${id}"
+      name: "${name}"
+      url: "${url}"
+      enabled: true`;
+
+        document.getElementById('config-generator').style.display = 'block';
+        document.getElementById('config-code').textContent = yaml;
+        document.getElementById('config-generator').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    async function autoTestUrl(url, id) {
+        const statusEl = document.getElementById(id + '-status');
+        if (statusEl) statusEl.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:1.5px;"></span>';
+        try {
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+            const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+            if (res.ok) {
+                const text = await res.text();
+                if (text.includes('<rss') || text.includes('<feed') || text.includes('<atom') || text.includes('<channel')) {
+                    if (statusEl) statusEl.innerHTML = '<span class="tag tag-success"><i class="fa-solid fa-check"></i>可用</span>';
+                    return true;
+                }
+            }
+            if (statusEl) statusEl.innerHTML = '<span class="tag tag-error"><i class="fa-solid fa-xmark"></i>不可用</span>';
+        } catch {
+            if (statusEl) statusEl.innerHTML = '<span class="tag tag-warn"><i class="fa-solid fa-question"></i>超时</span>';
+        }
+        return false;
+    }
+
+    async function testSpecificFeed(url, id) {
+        const statusEl = document.getElementById(id + '-status');
+        const previewEl = document.getElementById(id + '-preview');
+        if (statusEl) statusEl.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:1.5px;"></span>';
+
+        try {
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+            const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+
+            if (!res.ok) {
+                if (statusEl) statusEl.innerHTML = `<span class="tag tag-error"><i class="fa-solid fa-xmark"></i>${res.status}</span>`;
+                return;
+            }
+
+            const text = await res.text();
+            if (text.includes('<rss') || text.includes('<feed') || text.includes('<atom') || text.includes('<channel')) {
+                if (statusEl) statusEl.innerHTML = '<span class="tag tag-success"><i class="fa-solid fa-check"></i>可用</span>';
+
+                // Parse and preview
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/xml');
+                const items = doc.querySelectorAll('item, entry');
+
+                if (previewEl && items.length > 0) {
+                    const preview = Array.from(items).slice(0, 5).map(item => {
+                        const title = item.querySelector('title')?.textContent || '无标题';
+                        const pubDate = item.querySelector('pubDate, published, updated')?.textContent || '';
+                        const link = item.querySelector('link')?.textContent || item.querySelector('link')?.getAttribute('href') || '';
+                        return `<div class="feed-item">
+                            <a href="${link}" target="_blank" class="text-xs text-blue-300 hover:text-blue-200 hover:underline">${title}</a>
+                            <div class="text-[10px] text-slate-500 mt-0.5">${pubDate ? new Date(pubDate).toLocaleString('zh-CN') : ''}</div>
+                        </div>`;
+                    }).join('');
+
+                    previewEl.innerHTML = `
+                        <div class="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
+                            <div class="text-[10px] text-slate-500 mb-2 flex items-center justify-between">
+                                <span><i class="fa-solid fa-newspaper mr-1"></i>预览最新 ${Math.min(5, items.length)} / ${items.length} 条</span>
+                                <button onclick="generateConfig('${doc.querySelector('channel>title, feed>title')?.textContent || 'RSS Feed'}', '${url}')" class="text-green-400 hover:text-green-300">
+                                    <i class="fa-solid fa-plus mr-1"></i>添加到配置
+                                </button>
+                            </div>
+                            ${preview}
+                        </div>`;
+                    previewEl.style.display = 'block';
+                }
+            } else {
+                if (statusEl) statusEl.innerHTML = '<span class="tag tag-error"><i class="fa-solid fa-xmark"></i>非RSS</span>';
+            }
+        } catch (e) {
+            if (statusEl) statusEl.innerHTML = '<span class="tag tag-warn"><i class="fa-solid fa-question"></i>超时</span>';
+        }
+    }
+
+    async function testFeed() {
+        const url = document.getElementById('test-url-input').value.trim();
+        if (!url) return;
+
+        const resultDiv = document.getElementById('test-result');
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = '<div class="flex items-center gap-2 text-sm text-slate-400"><span class="spinner"></span>正在测试...</div>';
+
+        try {
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+            const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+
+            if (!res.ok) {
+                resultDiv.innerHTML = `<div class="p-4 bg-red-900/20 border border-red-800/30 rounded-lg">
+                    <span class="tag tag-error mb-2"><i class="fa-solid fa-xmark"></i>HTTP ${res.status}</span>
+                    <p class="text-xs text-slate-400 mt-2">该 URL 返回了错误状态码，可能不是有效的 RSS 源</p>
+                </div>`;
+                return;
+            }
+
+            const text = await res.text();
+            if (text.includes('<rss') || text.includes('<feed') || text.includes('<atom') || text.includes('<channel')) {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/xml');
+                const title = doc.querySelector('channel>title, feed>title')?.textContent || 'RSS Feed';
+                const items = doc.querySelectorAll('item, entry');
+
+                const preview = Array.from(items).slice(0, 8).map(item => {
+                    const t = item.querySelector('title')?.textContent || '无标题';
+                    const d = item.querySelector('pubDate, published, updated')?.textContent || '';
+                    const l = item.querySelector('link')?.textContent || item.querySelector('link')?.getAttribute('href') || '';
+                    return `<div class="feed-item">
+                        <a href="${l}" target="_blank" class="text-xs text-blue-300 hover:text-blue-200 hover:underline">${t}</a>
+                        <div class="text-[10px] text-slate-500 mt-0.5">${d ? new Date(d).toLocaleString('zh-CN') : ''}</div>
+                    </div>`;
+                }).join('');
+
+                const id = title.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+                const yaml = `    - id: "${id}"\n      name: "${title}"\n      url: "${url}"\n      enabled: true`;
+
+                resultDiv.innerHTML = `
+                <div class="p-4 bg-green-900/20 border border-green-800/30 rounded-lg fade-in">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="tag tag-success"><i class="fa-solid fa-check"></i>RSS 有效</span>
+                            <span class="text-sm font-semibold text-white">${title}</span>
+                            <span class="text-xs text-slate-500">${items.length} 条内容</span>
+                        </div>
+                        <button onclick="copyText(\`${yaml}\`)" class="text-xs text-green-400 hover:text-green-300 flex items-center gap-1">
+                            <i class="fa-solid fa-code"></i>复制配置
+                        </button>
+                    </div>
+                    ${preview}
+                    <div class="mt-3 p-3 bg-slate-900/50 rounded-lg">
+                        <div class="text-[10px] text-slate-500 mb-1">config.yaml 配置片段：</div>
+                        <pre class="!p-2 !text-[11px] !mb-0"><code>${yaml}</code></pre>
+                    </div>
+                </div>`;
+            } else {
+                resultDiv.innerHTML = `<div class="p-4 bg-yellow-900/20 border border-yellow-800/30 rounded-lg">
+                    <span class="tag tag-warn"><i class="fa-solid fa-exclamation-triangle"></i>非 RSS 格式</span>
+                    <p class="text-xs text-slate-400 mt-2">该 URL 返回的内容不是标准 RSS/Atom 格式</p>
+                </div>`;
+            }
+        } catch (e) {
+            resultDiv.innerHTML = `<div class="p-4 bg-yellow-900/20 border border-yellow-800/30 rounded-lg">
+                <span class="tag tag-warn"><i class="fa-solid fa-clock"></i>请求超时</span>
+                <p class="text-xs text-slate-400 mt-2">无法访问该 URL，可能是网络问题或 CORS 限制</p>
+            </div>`;
+        }
+    }
+
+    function showStatus(text, type) {
+        const bar = document.getElementById('status-bar');
+        const textEl = document.getElementById('status-text');
+        bar.style.display = 'flex';
+        textEl.textContent = text;
+        if (type === 'loading') {
+            bar.querySelector('.spinner').style.display = 'inline-block';
+        } else {
+            bar.querySelector('.spinner').style.display = 'none';
+        }
+    }
+
+    function copyText(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('已复制到剪贴板');
+        });
+    }
+
+    function copyConfig() {
+        const code = document.getElementById('config-code').textContent;
+        navigator.clipboard.writeText(code).then(() => {
+            showToast('配置已复制，粘贴到 config.yaml 的 rss.feeds 中即可');
+        });
+    }
+
+    function showToast(msg) {
+        const existing = document.querySelector('.toast-msg');
+        if (existing) existing.remove();
+        const toast = document.createElement('div');
+        toast.className = 'toast-msg fixed bottom-6 right-6 bg-green-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium shadow-lg z-50 fade-in flex items-center gap-2';
+        toast.innerHTML = `<i class="fa-solid fa-check-circle"></i>${msg}`;
+        document.body.appendChild(toast);
+        setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; setTimeout(() => toast.remove(), 300); }, 2500);
+    }
+
+    // Enter key support
+    document.addEventListener('DOMContentLoaded', () => {
+        renderInstances();
+        document.getElementById('url-input').addEventListener('keydown', e => { if (e.key === 'Enter') startSearch(); });
+        document.getElementById('test-url-input').addEventListener('keydown', e => { if (e.key === 'Enter') testFeed(); });
+    });
+    </script>
+</body>
+</html>
