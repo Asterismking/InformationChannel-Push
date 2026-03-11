@@ -110,9 +110,9 @@ rss:
       url: "http://www.ruanyifeng.com/blog/atom.xml"
 
     - id: "amz123"
-      name: "AMZ123跨境资讯"
-      url: "https://rss.app/feeds/FvmjX50LfnLnPZyk.xml"
-      enabled: false
+      name: "AMZ123跨境快讯"
+      url: "https://rsshub.app/amz123/kx"
+      enabled: true
 
     - id: "geekpark"
       name: "极客公园"
