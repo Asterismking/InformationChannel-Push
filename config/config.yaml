@@ -111,7 +111,7 @@ rss:
 
     - id: "amz123"
       name: "AMZ123跨境快讯"
-      url: "https://rsshub.app/amz123/kx"
+      url: "https://rsshub.rssforever.com/amz123/kx"
       enabled: true
 
     - id: "geekpark"
