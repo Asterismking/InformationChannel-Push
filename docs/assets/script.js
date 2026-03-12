@@ -5532,3 +5532,154 @@ function reorderDayPlanPeriods(presetName, planKey, orderedKeys) {
     clearTimeout(window._tlRenderTimer);
     window._tlRenderTimer = setTimeout(() => syncTimelineToUI(), 500);
 }
+
+// ==========================================
+// GitHub 一键上传功能
+// ==========================================
+
+const STORAGE_KEY_GH_TOKEN = 'trendradar_gh_token';
+const STORAGE_KEY_GH_REPO = 'trendradar_gh_repo';
+const STORAGE_KEY_GH_BRANCH = 'trendradar_gh_branch';
+
+window.openGithubUploadModal = function() {
+    const modal = document.getElementById('github-upload-modal');
+    modal.classList.remove('hidden');
+
+    // 恢复已保存的设置（token 不恢复，每次需手动输入以保证安全）
+    const savedRepo = localStorage.getItem(STORAGE_KEY_GH_REPO);
+    const savedBranch = localStorage.getItem(STORAGE_KEY_GH_BRANCH);
+    if (savedRepo) document.getElementById('gh-repo').value = savedRepo;
+    if (savedBranch) document.getElementById('gh-branch').value = savedBranch;
+
+    // 重置结果区域
+    const result = document.getElementById('gh-upload-result');
+    result.className = 'hidden mb-4 text-sm rounded-lg p-3 border';
+    result.textContent = '';
+    document.getElementById('gh-upload-btn').disabled = false;
+    document.getElementById('gh-upload-btn').innerHTML = '<i class="fa-brands fa-github"></i>上传';
+}
+
+window.closeGithubUploadModal = function() {
+    document.getElementById('github-upload-modal').classList.add('hidden');
+}
+
+window.confirmGithubUpload = async function() {
+    const token = document.getElementById('gh-token').value.trim();
+    const repo = document.getElementById('gh-repo').value.trim();
+    const branch = document.getElementById('gh-branch').value.trim() || 'master';
+    const commitMsg = document.getElementById('gh-commit-msg').value.trim() || 'chore: update config via web editor';
+
+    const uploadConfig = document.getElementById('gh-upload-config').checked;
+    const uploadFrequency = document.getElementById('gh-upload-frequency').checked;
+    const uploadTimeline = document.getElementById('gh-upload-timeline').checked;
+
+    const resultEl = document.getElementById('gh-upload-result');
+    const btn = document.getElementById('gh-upload-btn');
+
+    if (!token) { showUploadResult('error', '请输入 GitHub Token'); return; }
+    if (!repo || !repo.includes('/')) { showUploadResult('error', '请输入正确的仓库格式（owner/repo）'); return; }
+    if (!uploadConfig && !uploadFrequency && !uploadTimeline) { showUploadResult('error', '请至少选择一个文件'); return; }
+
+    // 保存设置（不保存 token）
+    localStorage.setItem(STORAGE_KEY_GH_REPO, repo);
+    localStorage.setItem(STORAGE_KEY_GH_BRANCH, branch);
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>上传中...';
+    showUploadResult('info', '正在上传...');
+
+    const filesToUpload = [];
+    if (uploadConfig) filesToUpload.push({ path: 'config/config.yaml', content: currentYaml });
+    if (uploadFrequency) filesToUpload.push({ path: 'config/frequency_words.txt', content: currentFrequency });
+    if (uploadTimeline) filesToUpload.push({ path: 'config/timeline.yaml', content: currentTimeline });
+
+    const results = [];
+    let hasError = false;
+
+    for (const file of filesToUpload) {
+        try {
+            // 获取文件当前 SHA（更新文件必须提供 SHA）
+            const getUrl = `https://api.github.com/repos/${repo}/contents/${file.path}?ref=${branch}`;
+            const getRes = await fetch(getUrl, {
+                headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' }
+            });
+
+            let sha = null;
+            if (getRes.ok) {
+                const fileData = await getRes.json();
+                sha = fileData.sha;
+            } else if (getRes.status !== 404) {
+                const err = await getRes.json();
+                throw new Error(err.message || `获取文件失败 (${getRes.status})`);
+            }
+
+            // 上传文件
+            const putUrl = `https://api.github.com/repos/${repo}/contents/${file.path}`;
+            const body = {
+                message: commitMsg,
+                content: btoa(unescape(encodeURIComponent(file.content))),
+                branch: branch
+            };
+            if (sha) body.sha = sha;
+
+            const putRes = await fetch(putUrl, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/vnd.github+json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+            });
+
+            if (!putRes.ok) {
+                const err = await putRes.json();
+                throw new Error(err.message || `上传失败 (${putRes.status})`);
+            }
+
+            const putData = await putRes.json();
+            const commitUrl = putData.commit?.html_url || '';
+            results.push({ file: file.path, success: true, commitUrl });
+        } catch (err) {
+            results.push({ file: file.path, success: false, error: err.message });
+            hasError = true;
+        }
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-brands fa-github"></i>上传';
+
+    // 显示结果
+    const successFiles = results.filter(r => r.success);
+    const failFiles = results.filter(r => !r.success);
+
+    let html = '';
+    if (successFiles.length > 0) {
+        html += `<div class="text-green-700 font-bold mb-1"><i class="fa-solid fa-check-circle mr-1"></i>上传成功 (${successFiles.length} 个文件)</div>`;
+        successFiles.forEach(r => {
+            html += `<div class="text-green-600 text-xs ml-4">✓ ${r.file}`;
+            if (r.commitUrl) html += ` <a href="${r.commitUrl}" target="_blank" class="underline ml-1">查看提交</a>`;
+            html += '</div>';
+        });
+    }
+    if (failFiles.length > 0) {
+        html += `<div class="text-red-700 font-bold mt-2 mb-1"><i class="fa-solid fa-times-circle mr-1"></i>上传失败 (${failFiles.length} 个文件)</div>`;
+        failFiles.forEach(r => {
+            html += `<div class="text-red-600 text-xs ml-4">✗ ${r.file}: ${r.error}</div>`;
+        });
+    }
+
+    resultEl.innerHTML = html;
+    resultEl.className = `mb-4 text-sm rounded-lg p-3 border ${hasError && successFiles.length === 0 ? 'bg-red-50 border-red-200' : hasError ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`;
+}
+
+function showUploadResult(type, message) {
+    const resultEl = document.getElementById('gh-upload-result');
+    const styles = {
+        error: 'bg-red-50 border-red-200 text-red-700',
+        info: 'bg-blue-50 border-blue-200 text-blue-700',
+        success: 'bg-green-50 border-green-200 text-green-700'
+    };
+    resultEl.className = `mb-4 text-sm rounded-lg p-3 border ${styles[type]}`;
+    resultEl.textContent = message;
+}

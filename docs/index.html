@@ -39,6 +39,9 @@
                 <button onclick="openLoadConfigModal()" class="text-xs text-blue-600 hover:text-blue-800 underline flex items-center gap-1">
                     <i class="fa-solid fa-cloud-arrow-down"></i>从仓库加载最新配置
                 </button>
+                <button onclick="openGithubUploadModal()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded text-sm font-medium transition-colors shadow-sm flex items-center gap-1.5">
+                    <i class="fa-brands fa-github"></i>上传到 GitHub
+                </button>
                 <button onclick="copyResult()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-sm font-medium transition-colors shadow-sm">
                     <i class="fa-regular fa-copy mr-1.5"></i>复制配置
                 </button>
@@ -430,6 +433,82 @@
             <div class="flex justify-end gap-2 mt-6">
                 <button onclick="closeTlNewPeriodModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
                 <button onclick="confirmTlNewPeriod()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">添加</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- GitHub 上传弹窗 -->
+    <div id="github-upload-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 480px;">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-gray-800"><i class="fa-brands fa-github mr-2"></i>上传配置到 GitHub</h3>
+                <button onclick="closeGithubUploadModal()" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-times text-xl"></i></button>
+            </div>
+
+            <!-- 设置区域 -->
+            <div id="github-settings-area" class="space-y-3 mb-4">
+                <div class="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-800">
+                    <i class="fa-solid fa-shield-halved mr-1 text-blue-500"></i>
+                    Token 仅保存在本地浏览器，不会上传到任何服务器。需要 <strong>repo</strong> 权限。
+                    <a href="https://github.com/settings/tokens/new?scopes=repo&description=InformationChannel-Config-Editor" target="_blank" class="underline ml-1">生成 Token</a>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">GitHub Personal Access Token</label>
+                    <input type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxx" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 text-sm font-mono">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">仓库 (owner/repo)</label>
+                        <input type="text" id="gh-repo" placeholder="Asterismking/InformationChannel-Push" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">分支</label>
+                        <input type="text" id="gh-branch" placeholder="master" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 text-sm">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">提交信息（可选）</label>
+                    <input type="text" id="gh-commit-msg" placeholder="chore: update config via web editor" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 text-sm">
+                </div>
+            </div>
+
+            <!-- 文件选择 -->
+            <div class="space-y-2 mb-4">
+                <div class="text-xs font-bold text-gray-600 mb-2">选择要上传的文件：</div>
+                <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-green-50 hover:border-green-300 cursor-pointer transition-colors">
+                    <input type="checkbox" id="gh-upload-config" checked class="w-4 h-4 text-green-600 rounded">
+                    <div class="flex-1">
+                        <div class="font-medium text-gray-800 text-sm">config.yaml</div>
+                        <div class="text-xs text-gray-500">系统配置、平台、AI、通知等</div>
+                    </div>
+                    <i class="fa-solid fa-file-code text-blue-400"></i>
+                </label>
+                <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-green-50 hover:border-green-300 cursor-pointer transition-colors">
+                    <input type="checkbox" id="gh-upload-frequency" checked class="w-4 h-4 text-green-600 rounded">
+                    <div class="flex-1">
+                        <div class="font-medium text-gray-800 text-sm">frequency_words.txt</div>
+                        <div class="text-xs text-gray-500">关键词组、过滤规则</div>
+                    </div>
+                    <i class="fa-solid fa-filter text-orange-400"></i>
+                </label>
+                <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-green-50 hover:border-green-300 cursor-pointer transition-colors">
+                    <input type="checkbox" id="gh-upload-timeline" checked class="w-4 h-4 text-green-600 rounded">
+                    <div class="flex-1">
+                        <div class="font-medium text-gray-800 text-sm">timeline.yaml</div>
+                        <div class="text-xs text-gray-500">调度时间线</div>
+                    </div>
+                    <i class="fa-solid fa-calendar-week text-purple-400"></i>
+                </label>
+            </div>
+
+            <!-- 进度/结果区域 -->
+            <div id="gh-upload-result" class="hidden mb-4 text-sm rounded-lg p-3 border"></div>
+
+            <div class="flex justify-end gap-2">
+                <button onclick="closeGithubUploadModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
+                <button onclick="confirmGithubUpload()" id="gh-upload-btn" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2">
+                    <i class="fa-brands fa-github"></i>上传
+                </button>
             </div>
         </div>
     </div>
